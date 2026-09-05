@@ -22,26 +22,27 @@ app.get("/fetch", async (req, res) => {
 
     const page = await browser.newPage();
 
-    // 1. Ga naar de homepage
-    await page.goto("https://www.stuller.com/", { waitUntil: "domcontentloaded", timeout: 0 });
+    // 1️⃣ Ga naar de homepage en wacht tot alle JS geladen is
+    await page.goto("https://www.stuller.com/", { waitUntil: "networkidle2", timeout: 0 });
 
-    // 2. Wacht op de juiste zoekbalk
-    await page.waitForSelector('input[data-test="search-input"]', { visible: true, timeout: 60000 });
+    // 2️⃣ Wacht expliciet op de zoekbalk (data-test="search-input")
+    await page.waitForFunction(() => {
+      const el = document.querySelector('input[data-test="search-input"]');
+      return el && el.offsetParent !== null;
+    }, { timeout: 60000 });
 
-    // 3. Vul het serienummer in
+    // 3️⃣ Typ het serienummer in en druk op Enter
     await page.type('input[data-test="search-input"]', series);
-
-    // 4. Start de zoekactie
     await page.keyboard.press("Enter");
 
-    // 5. Wacht op redirect naar productpagina
+    // 4️⃣ Wacht op redirect naar productpagina
     await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
 
-    // 6. Wacht op specificatietabel
+    // 5️⃣ Wacht op specificatietabel
     const selector = '[data-test="specifications"] table.detailsTable';
     await page.waitForSelector(selector, { timeout: 60000 });
 
-    // 7. Extract specificaties
+    // 6️⃣ Lees de specificaties uit
     const specs = await page.evaluate((sel) => {
       const rows = document.querySelectorAll(`${sel} tr`);
       const data = {};
@@ -58,7 +59,7 @@ app.get("/fetch", async (req, res) => {
 
     await browser.close();
 
-    // 8. Opschonen → nette JSON keys
+    // 7️⃣ Opschonen → nette JSON keys
     const cleaned = {};
     for (const [label, value] of Object.entries(specs)) {
       if (!value || value === "-") continue;
