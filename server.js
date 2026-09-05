@@ -11,6 +11,8 @@ app.get("/fetch", async (req, res) => {
   const series = req.query.url; // hier geef je alleen het serienummer mee
   if (!series) return res.status(400).json({ error: "Missing series number" });
 
+  const productUrl = `https://www.stuller.com/products/${series}/`;
+
   try {
     const browser = await puppeteer.launch({
       headless: true,
@@ -18,14 +20,7 @@ app.get("/fetch", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto("https://www.stuller.com/", { waitUntil: "domcontentloaded" });
-
-    // zoekbalk invullen en zoeken
-    await page.type('input[placeholder="Search..."]', series);
-    await page.keyboard.press("Enter");
-
-    // wacht tot productpagina geladen is
-    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
+    await page.goto(productUrl, { waitUntil: "networkidle2", timeout: 0 });
 
     // wacht op specificatietabel
     const selector = '[data-test="specifications"] table.detailsTable';
