@@ -14,14 +14,24 @@ app.get("/fetch", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "networkidle2" });
+    await page.goto(url, { waitUntil: "networkidle2", timeout: 0 });
 
-    await page.waitForSelector('[data-test="specifications"] table.detailsTable');
+    // wacht maximaal 60 seconden op de tabel
+    try {
+      await page.waitForSelector('[data-test="specifications"] table.detailsTable', { timeout: 60000 });
+    } catch {
+      console.warn("Specifications table not found within timeout");
+    }
+
+    // check of de tabel bestaat
+    const exists = await page.$('[data-test="specifications"] table.detailsTable');
+    if (!exists) {
+      await browser.close();
+      return res.status(404).json({ error: "Specifications table not found" });
+    }
 
     const specs = await page.evaluate(() => {
-      const rows = document.querySelectorAll(
-        '[data-test="specifications"] table.detailsTable tr'
-      );
+      const rows = document.querySelectorAll('[data-test="specifications"] table.detailsTable tr');
       const data = {};
       rows.forEach((row) => {
         const cells = row.querySelectorAll("td");
