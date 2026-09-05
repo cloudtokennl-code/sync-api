@@ -3,14 +3,19 @@ import puppeteer from "puppeteer";
 
 const app = express();
 
+// Helper: maak nette JSON keys
 function cleanKey(label) {
-  return label.toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "");
+  return label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "_")
+    .replace(/^_|_$/g, "");
 }
 
 app.get("/fetch", async (req, res) => {
   const series = req.query.url; // hier geef je alleen het serienummer mee
   if (!series) return res.status(400).json({ error: "Missing series number" });
 
+  // Bouw de product-URL direct op basis van het serienummer
   const productUrl = `https://www.stuller.com/products/${series}/`;
 
   try {
@@ -20,12 +25,33 @@ app.get("/fetch", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto(productUrl, { waitUntil: "networkidle2", timeout: 0 });
 
-    // wacht op specificatietabel
-    const selector = '[data-test="specifications"] table.detailsTable';
-    await page.waitForSelector(selector, { timeout: 60000 });
+    // Laad de pagina en geef extra tijd voor JS-rendering
+    await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 0 });
+    await page.waitForTimeout(8000);
 
+    // Controleer meerdere mogelijke selectors
+    const selectors = [
+      '[data-test="specifications"] table.detailsTable',
+      'table.detailsTable',
+      '[data-test="product-specifications"] table'
+    ];
+
+    let found = false;
+    for (const sel of selectors) {
+      try {
+        await page.waitForSelector(sel, { timeout: 60000 });
+        found = sel;
+        break;
+      } catch {}
+    }
+
+    if (!found) {
+      await browser.close();
+      return res.status(404).json({ error: "Specifications table not found" });
+    }
+
+    // Lees de specificaties uit
     const specs = await page.evaluate((sel) => {
       const rows = document.querySelectorAll(`${sel} tr`);
       const data = {};
@@ -38,10 +64,11 @@ app.get("/fetch", async (req, res) => {
         }
       });
       return data;
-    }, selector);
+    }, found);
 
     await browser.close();
 
+    // Opschonen → nette JSON keys
     const cleaned = {};
     for (const [label, value] of Object.entries(specs)) {
       if (!value || value === "-") continue;
