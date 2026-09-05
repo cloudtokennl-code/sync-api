@@ -3,7 +3,6 @@ import puppeteer from "puppeteer";
 
 const app = express();
 
-// Helper: maak nette JSON keys
 function cleanKey(label) {
   return label
     .toLowerCase()
@@ -12,10 +11,9 @@ function cleanKey(label) {
 }
 
 app.get("/fetch", async (req, res) => {
-  const series = req.query.url; // hier geef je alleen het serienummer mee
+  const series = req.query.url;
   if (!series) return res.status(400).json({ error: "Missing series number" });
 
-  // Bouw de product-URL direct op basis van het serienummer
   const productUrl = `https://www.stuller.com/products/${series}/`;
 
   try {
@@ -26,9 +24,9 @@ app.get("/fetch", async (req, res) => {
 
     const page = await browser.newPage();
 
-    // Laad de pagina en geef extra tijd voor JS-rendering
+    // Laad de pagina en wacht extra voor JS-rendering
     await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 0 });
-    await page.waitForTimeout(8000);
+    await new Promise(r => setTimeout(r, 8000)); // wacht 8 seconden
 
     // Controleer meerdere mogelijke selectors
     const selectors = [
