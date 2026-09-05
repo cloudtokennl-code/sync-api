@@ -14,8 +14,6 @@ app.get("/fetch", async (req, res) => {
   const series = req.query.url;
   if (!series) return res.status(400).json({ error: "Missing series number" });
 
-  const productUrl = `https://www.stuller.com/products/${series}/`;
-
   try {
     const browser = await puppeteer.launch({
       headless: true,
@@ -24,32 +22,26 @@ app.get("/fetch", async (req, res) => {
 
     const page = await browser.newPage();
 
-    // Laad de pagina en wacht extra voor JS-rendering
-    await page.goto(productUrl, { waitUntil: "domcontentloaded", timeout: 0 });
-    await new Promise(r => setTimeout(r, 8000)); // wacht 8 seconden
+    // 1. Ga naar de homepage
+    await page.goto("https://www.stuller.com/", { waitUntil: "domcontentloaded", timeout: 0 });
 
-    // Controleer meerdere mogelijke selectors
-    const selectors = [
-      '[data-test="specifications"] table.detailsTable',
-      'table.detailsTable',
-      '[data-test="product-specifications"] table'
-    ];
+    // 2. Wacht op de juiste zoekbalk
+    await page.waitForSelector('input[data-test="search-input"]', { visible: true, timeout: 60000 });
 
-    let found = false;
-    for (const sel of selectors) {
-      try {
-        await page.waitForSelector(sel, { timeout: 60000 });
-        found = sel;
-        break;
-      } catch {}
-    }
+    // 3. Vul het serienummer in
+    await page.type('input[data-test="search-input"]', series);
 
-    if (!found) {
-      await browser.close();
-      return res.status(404).json({ error: "Specifications table not found" });
-    }
+    // 4. Start de zoekactie
+    await page.keyboard.press("Enter");
 
-    // Lees de specificaties uit
+    // 5. Wacht op redirect naar productpagina
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
+
+    // 6. Wacht op specificatietabel
+    const selector = '[data-test="specifications"] table.detailsTable';
+    await page.waitForSelector(selector, { timeout: 60000 });
+
+    // 7. Extract specificaties
     const specs = await page.evaluate((sel) => {
       const rows = document.querySelectorAll(`${sel} tr`);
       const data = {};
@@ -62,11 +54,11 @@ app.get("/fetch", async (req, res) => {
         }
       });
       return data;
-    }, found);
+    }, selector);
 
     await browser.close();
 
-    // Opschonen → nette JSON keys
+    // 8. Opschonen → nette JSON keys
     const cleaned = {};
     for (const [label, value] of Object.entries(specs)) {
       if (!value || value === "-") continue;
