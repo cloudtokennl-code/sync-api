@@ -8,8 +8,8 @@ function cleanKey(label) {
 }
 
 app.get("/fetch", async (req, res) => {
-  const url = req.query.url;
-  if (!url) return res.status(400).json({ error: "Missing URL parameter" });
+  const series = req.query.url; // hier geef je alleen het serienummer mee
+  if (!series) return res.status(400).json({ error: "Missing series number" });
 
   try {
     const browser = await puppeteer.launch({
@@ -18,28 +18,18 @@ app.get("/fetch", async (req, res) => {
     });
 
     const page = await browser.newPage();
-    await page.goto(url, { waitUntil: "domcontentloaded", timeout: 0 });
+    await page.goto("https://www.stuller.com/", { waitUntil: "domcontentloaded" });
 
-    // wacht op een van de mogelijke tabellen
-    const selectors = [
-      '[data-test="specifications"] table.detailsTable',
-      'table.detailsTable',
-      '[data-test="product-specifications"] table'
-    ];
+    // zoekbalk invullen en zoeken
+    await page.type('input[placeholder="Search..."]', series);
+    await page.keyboard.press("Enter");
 
-    let found = false;
-    for (const sel of selectors) {
-      try {
-        await page.waitForSelector(sel, { timeout: 60000 });
-        found = sel;
-        break;
-      } catch {}
-    }
+    // wacht tot productpagina geladen is
+    await page.waitForNavigation({ waitUntil: "networkidle2", timeout: 60000 });
 
-    if (!found) {
-      await browser.close();
-      return res.status(404).json({ error: "No specifications table found on page" });
-    }
+    // wacht op specificatietabel
+    const selector = '[data-test="specifications"] table.detailsTable';
+    await page.waitForSelector(selector, { timeout: 60000 });
 
     const specs = await page.evaluate((sel) => {
       const rows = document.querySelectorAll(`${sel} tr`);
@@ -53,7 +43,7 @@ app.get("/fetch", async (req, res) => {
         }
       });
       return data;
-    }, found);
+    }, selector);
 
     await browser.close();
 
